@@ -1,0 +1,404 @@
+
+#include <GL/glew.h>
+#include <GL/freeglut.h>
+#include <cstdio>
+#include <cmath>
+#include <vector>
+#include <string>
+
+struct Mat4 {
+    float m[16];
+    Mat4() { for (int i = 0; i < 16; ++i) m[i] = 0.0f; }
+    static Mat4 identity() {
+        Mat4 I; I.m[0] = I.m[5] = I.m[10] = I.m[15] = 1.0f; return I;
+    }
+};
+const float PI = 3.14159265358979323846f;
+Mat4 mul(const Mat4& A, const Mat4& B) {
+    Mat4 C;
+
+    for (int col = 0; col < 4; ++col) {
+        for (int row = 0; row < 4; ++row) {
+            float s = 0.0f;
+            for (int k = 0; k < 4; ++k) {
+                s += A.m[k * 4 + row] * B.m[col * 4 + k];
+            }
+            C.m[col * 4 + row] = s;
+        }
+    }
+    return C;
+}
+
+Mat4 translation(float tx, float ty, float tz) {
+    Mat4 T = Mat4::identity();
+    T.m[12] = tx; T.m[13] = ty; T.m[14] = tz;
+    return T;
+}
+
+Mat4 scaleMat(float sx, float sy, float sz) {
+    Mat4 S; S.m[0] = sx; S.m[5] = sy; S.m[10] = sz; S.m[15] = 1.0f;
+    return S;
+}
+
+Mat4 rotX(float deg) {
+    float r = deg * (PI / 180.0f);
+    float c = cosf(r), s = sinf(r);
+    Mat4 R = Mat4::identity();
+    R.m[5] = c; R.m[6] = s;
+    R.m[9] = -s; R.m[10] = c;
+    return R;
+}
+Mat4 rotY(float deg) {
+    float r = deg * (PI / 180.0f);
+    float c = cosf(r), s = sinf(r);
+    Mat4 R = Mat4::identity();
+    R.m[0] = c; R.m[2] = -s;
+    R.m[8] = s; R.m[10] = c;
+    return R;
+}
+Mat4 rotZ(float deg) {
+    float r = deg * (PI / 180.0f);
+    float c = cosf(r), s = sinf(r);
+    Mat4 R = Mat4::identity();
+    R.m[0] = c; R.m[1] = s;
+    R.m[4] = -s; R.m[5] = c;
+    return R;
+}
+
+
+GLfloat cubeVertices[] = {
+
+    0.5f, -0.5f, -0.5f,   1,0,0,
+    0.5f,  0.5f, -0.5f,   1,0,0,
+    0.5f,  0.5f,  0.5f,   1,0,0,
+
+    0.5f, -0.5f, -0.5f,   1,0,0,
+    0.5f,  0.5f,  0.5f,   1,0,0,
+    0.5f, -0.5f,  0.5f,   1,0,0,
+
+
+    -0.5f, -0.5f,  0.5f,  0,1,0,
+    -0.5f,  0.5f,  0.5f,  0,1,0,
+    -0.5f,  0.5f, -0.5f,  0,1,0,
+
+    -0.5f, -0.5f,  0.5f,  0,1,0,
+    -0.5f,  0.5f, -0.5f,  0,1,0,
+    -0.5f, -0.5f, -0.5f,  0,1,0,
+
+
+    -0.5f,  0.5f, -0.5f,  0,0,1,
+     0.5f,  0.5f, -0.5f,  0,0,1,
+     0.5f,  0.5f,  0.5f,  0,0,1,
+
+    -0.5f,  0.5f, -0.5f,  0,0,1,
+     0.5f,  0.5f,  0.5f,  0,0,1,
+    -0.5f,  0.5f,  0.5f,  0,0,1,
+
+
+    -0.5f, -0.5f,  0.5f,  1,1,0,
+     0.5f, -0.5f,  0.5f,  1,1,0,
+     0.5f, -0.5f, -0.5f,  1,1,0,
+
+    -0.5f, -0.5f,  0.5f,  1,1,0,
+     0.5f, -0.5f, -0.5f,  1,1,0,
+    -0.5f, -0.5f, -0.5f,  1,1,0,
+
+    -0.5f, -0.5f, -0.5f,  1,0,1,
+     0.5f, -0.5f, -0.5f,  1,0,1,
+     0.5f,  0.5f, -0.5f,  1,0,1,
+
+    -0.5f, -0.5f, -0.5f,  1,0,1,
+     0.5f,  0.5f, -0.5f,  1,0,1,
+    -0.5f,  0.5f, -0.5f,  1,0,1,
+
+
+     0.5f, -0.5f,  0.5f,  0,1,1,
+    -0.5f, -0.5f,  0.5f,  0,1,1,
+    -0.5f,  0.5f,  0.5f,  0,1,1,
+
+     0.5f, -0.5f,  0.5f,  0,1,1,
+    -0.5f,  0.5f,  0.5f,  0,1,1,
+     0.5f,  0.5f,  0.5f,  0,1,1
+};
+
+const char* vertexShaderSrc = R"(
+#version 330 core
+layout(location = 0) in vec3 aPos;
+layout(location = 1) in vec3 aColor;
+uniform mat4 uModel;
+out vec3 vColor;
+void main() {
+    gl_Position = uModel * vec4(aPos, 1.0);
+    vColor = aColor;
+}
+)";
+
+const char* fragmentShaderSrc = R"(
+#version 330 core
+in vec3 vColor;
+out vec4 fragColor;
+void main() {
+    fragColor = vec4(vColor, 1.0);
+}
+)";
+
+
+GLuint vao = 0, vbo = 0, program = 0;
+GLint uModelLoc = -1;
+
+enum Mode { MODE_SCALE = 0, MODE_ROTATE = 1, MODE_TRANSLATE = 2 };
+Mode currentMode = MODE_ROTATE;
+
+
+float sx = 1.0f, sy = 1.0f, sz = 1.0f;
+
+float rx = 0.0f, ry = 0.0f, rz = 0.0f;
+
+float tx = 0.0f, ty_ = 0.0f, tz = 0.0f;
+
+
+float deltaScale = 0.1f;
+float deltaRotate = 5.0f; 
+float deltaTrans = 0.1f;
+
+
+Mat4 buildModel() {
+    Mat4 S = scaleMat(sx, sy, sz);
+    Mat4 Rx = rotX(rx);
+    Mat4 Ry = rotY(ry);
+    Mat4 Rz = rotZ(rz);
+
+    Mat4 R = mul(Rz, mul(Ry, Rx));
+    Mat4 T = translation(tx, ty_, tz);
+
+    Mat4 M = mul(T, mul(R, S));
+    return M;
+}
+
+
+void uploadModelMatrix() {
+    Mat4 M = buildModel();
+
+    glUniformMatrix4fv(uModelLoc, 1, GL_FALSE, M.m);
+}
+
+void printInstructions() {
+    puts("=== 3D Cube Transform Controls ===");
+    puts("Right-click menu: choose transformation to modify: SCALE / ROTATE / TRANSLATE");
+    puts("When a mode is chosen, the following keys modify the X/Y/Z components of that mode:");
+    puts("  x : increase X-component");
+    puts("  X (Shift+x) : decrease X-component");
+    puts("  y : increase Y-component");
+    puts("  Y (Shift+y) : decrease Y-component");
+    puts("  z : increase Z-component");
+    puts("  Z (Shift+z) : decrease Z-component");
+    puts("Two keys to change the delta (amount applied by each keystroke) for the current mode:");
+    puts("  +  : increase delta for current mode");
+    puts("  -  : decrease delta for current mode");
+    puts("Reset all transformations:");
+    puts("  r  : reset scale, rotation, translation and deltas to defaults");
+    puts("Note: transformations are applied in order: SCALE -> ROTATION -> TRANSLATION.");
+    puts("No camera or projection is applied (default orthographic). Translation in Z has no perspective effect.");
+    printf("Current mode: %s\n", (currentMode == MODE_SCALE ? "SCALE" : currentMode == MODE_ROTATE ? "ROTATE" : "TRANSLATE"));
+    printf("Scale delta: %.3f, Rotate delta: %.3f deg, Translate delta: %.3f\n", deltaScale, deltaRotate, deltaTrans);
+    puts("=================================\n");
+}
+
+void keyboard(unsigned char key, int x, int y) {
+    bool changed = false;
+    if (key == 'r' || key == 'R') {
+        // reset
+        sx = sy = sz = 1.0f;
+        rx = ry = rz = 0.0f;
+        tx = ty_ = tz = 0.0f;
+        deltaScale = 0.1f; deltaRotate = 5.0f; deltaTrans = 0.1f;
+        changed = true;
+        printf("Reset transformations and deltas.\n");
+    }
+    else if (key == '+' || key == '=') {
+        // increase delta for current mode
+        if (currentMode == MODE_SCALE) { deltaScale *= 1.25f; printf("Scale delta -> %.5f\n", deltaScale); }
+        else if (currentMode == MODE_ROTATE) { deltaRotate *= 1.25f; printf("Rotate delta -> %.5f deg\n", deltaRotate); }
+        else { deltaTrans *= 1.25f; printf("Translate delta -> %.5f\n", deltaTrans); }
+    }
+    else if (key == '-') {
+        if (currentMode == MODE_SCALE) { deltaScale /= 1.25f; printf("Scale delta -> %.5f\n", deltaScale); }
+        else if (currentMode == MODE_ROTATE) { deltaRotate /= 1.25f; printf("Rotate delta -> %.5f deg\n", deltaRotate); }
+        else { deltaTrans /= 1.25f; printf("Translate delta -> %.5f\n", deltaTrans); }
+    }
+    else if (key == 'x' || key == 'X' || key == 'y' || key == 'Y' || key == 'z' || key == 'Z') {
+        bool increase = (key == 'x' || key == 'y' || key == 'z');
+        char comp = (key == 'x' || key == 'X') ? 'x' : (key == 'y' || key == 'Y') ? 'y' : 'z';
+        float sign = increase ? 1.0f : -1.0f;
+
+        if (currentMode == MODE_SCALE) {
+            if (comp == 'x') { sx += sign * deltaScale; if (sx < 0.001f) sx = 0.001f; }
+            if (comp == 'y') { sy += sign * deltaScale; if (sy < 0.001f) sy = 0.001f; }
+            if (comp == 'z') { sz += sign * deltaScale; if (sz < 0.001f) sz = 0.001f; }
+            printf("Scale -> (%.3f, %.3f, %.3f)\n", sx, sy, sz);
+        }
+        else if (currentMode == MODE_ROTATE) {
+            if (comp == 'x') { rx += sign * deltaRotate; }
+            if (comp == 'y') { ry += sign * deltaRotate; }
+            if (comp == 'z') { rz += sign * deltaRotate; }
+            printf("Rotate -> (%.2f°, %.2f°, %.2f°)\n", rx, ry, rz);
+        }
+        else {
+            if (comp == 'x') { tx += sign * deltaTrans; }
+            if (comp == 'y') { ty_ += sign * deltaTrans; }
+            if (comp == 'z') { tz += sign * deltaTrans; }
+            printf("Translate -> (%.3f, %.3f, %.3f)\n", tx, ty_, tz);
+        }
+        changed = true;
+    }
+
+    if (changed) {
+        uploadModelMatrix();
+        glutPostRedisplay();
+    }
+}
+
+void menuHandler(int value) {
+    if (value == 0) currentMode = MODE_SCALE;
+    else if (value == 1) currentMode = MODE_ROTATE;
+    else if (value == 2) currentMode = MODE_TRANSLATE;
+    printf("Switched mode to: %s\n", (currentMode == MODE_SCALE ? "SCALE" : currentMode == MODE_ROTATE ? "ROTATE" : "TRANSLATE"));
+    printInstructions();
+}
+
+// ---------- Initialize GL ----------
+void checkShaderCompile(GLuint shader) {
+    GLint ok; glGetShaderiv(shader, GL_COMPILE_STATUS, &ok);
+    if (!ok) {
+        GLint len; glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &len);
+        std::vector<char> log(len + 1);
+        glGetShaderInfoLog(shader, len, nullptr, log.data());
+        fprintf(stderr, "Shader compile error: %s\n", log.data());
+        exit(1);
+    }
+}
+
+void checkProgramLink(GLuint prog) {
+    GLint ok; glGetProgramiv(prog, GL_LINK_STATUS, &ok);
+    if (!ok) {
+        GLint len; glGetProgramiv(prog, GL_INFO_LOG_LENGTH, &len);
+        std::vector<char> log(len + 1);
+        glGetProgramInfoLog(prog, len, nullptr, log.data());
+        fprintf(stderr, "Program link error: %s\n", log.data());
+        exit(1);
+    }
+}
+
+// ---------- Display function ----------
+void display() {
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glUseProgram(program);
+    glBindVertexArray(vao);
+    glDrawArrays(GL_TRIANGLES, 0, 36); // 6 faces × 2 triangles × 3 vertices = 36
+    glutSwapBuffers();
+}
+
+// ---------- Window resize handler ----------
+void reshape(int width, int height) {
+    glViewport(0, 0, width, height);
+}
+
+// ---------- Initialize GL function ----------
+void init() {
+    // Initialize GLEW
+    glewExperimental = GL_TRUE;
+    if (glewInit() != GLEW_OK) {
+        fprintf(stderr, "Failed to initialize GLEW\n");
+        exit(1);
+    }
+
+    // Create and compile shaders
+    GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(vertexShader, 1, &vertexShaderSrc, nullptr);
+    glCompileShader(vertexShader);
+    checkShaderCompile(vertexShader);
+
+    GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(fragmentShader, 1, &fragmentShaderSrc, nullptr);
+    glCompileShader(fragmentShader);
+    checkShaderCompile(fragmentShader);
+
+    // Create shader program
+    program = glCreateProgram();
+    glAttachShader(program, vertexShader);
+    glAttachShader(program, fragmentShader);
+    glLinkProgram(program);
+    checkProgramLink(program);
+
+    // Clean up shaders
+    glDeleteShader(vertexShader);
+    glDeleteShader(fragmentShader);
+
+    // Get uniform location
+    uModelLoc = glGetUniformLocation(program, "uModel");
+
+    // Create VAO and VBO
+    glGenVertexArrays(1, &vao);
+    glGenBuffers(1, &vbo);
+
+    glBindVertexArray(vao);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(cubeVertices), cubeVertices, GL_STATIC_DRAW);
+
+    // Position attribute (location 0)
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(GLfloat), (void*)0);
+    glEnableVertexAttribArray(0);
+
+    // Color attribute (location 1)  
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(GLfloat), (void*)(3 * sizeof(GLfloat)));
+    glEnableVertexAttribArray(1);
+
+    // Set initial model matrix
+    glUseProgram(program);
+    uploadModelMatrix();
+
+    // Enable depth testing for proper 3D rendering
+    glEnable(GL_DEPTH_TEST);
+
+    // Set clear color
+    glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+}
+
+// ---------- Main function ----------
+int main(int argc, char** argv) {
+    // Initialize GLUT
+    glutInit(&argc, argv);
+    glutInitContextVersion(3, 3);
+    glutInitContextProfile(GLUT_CORE_PROFILE);
+    glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);
+    glutInitWindowSize(800, 600);
+    glutCreateWindow("3D Cube Transformations");
+
+    // Initialize GLEW and OpenGL
+    init();
+
+    // Register callbacks
+    glutDisplayFunc(display);
+    glutReshapeFunc(reshape);
+    glutKeyboardFunc(keyboard);
+
+    // Create right-click menu
+    int menu = glutCreateMenu(menuHandler);
+    glutAddMenuEntry("Scale", 0);
+    glutAddMenuEntry("Rotate", 1);
+    glutAddMenuEntry("Translate", 2);
+    glutAttachMenu(GLUT_RIGHT_BUTTON);
+
+    // Print instructions
+    printInstructions();
+
+    // Start main loop
+    glutMainLoop();
+
+    // Cleanup (though we never get here in GLUT)
+    glDeleteVertexArrays(1, &vao);
+    glDeleteBuffers(1, &vbo);
+    glDeleteProgram(program);
+
+    return 0;
+}
