@@ -1,0 +1,271 @@
+// main.cpp
+// Компилировать: -lfreeglut -lopengl32 (Windows) или -lGL -lglut (Linux)
+
+#include <GL/freeglut.h>
+#include <cmath>
+
+// ---------- Глобальные переменные ----------
+int winMain = 0;
+int winSub = 0;
+int win2 = 0;
+
+const float PI = 3.14159265358979323846f;
+bool animate = true;
+
+// Квадраты в главном окне
+float squareRotate = 0.0f; 
+int squareLevels = 6;
+float squareMaxR = 0.4f;
+int squareColorsLevel = 0; // 0 белые, 1 красные, 2 зелёные
+float squareColor[3] = { 1.0f, 1.0f, 1.0f }; // по умолчанию белый
+
+// Фон подокна
+int subBgIndex = 0;
+const float subBgColors[][3] = {
+    {0.1f, 0.2f, 0.3f}, // тёмно-синий
+    {0.2f, 0.6f, 0.9f}, // голубой
+    {0.9f, 0.85f, 0.7f} // бежевый
+};
+void display() {
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    glColor3f(squareColor[0], squareColor[1], squareColor[2]); // ← тут
+
+    glutSolidCube(1.0);
+
+    glutSwapBuffers();
+}
+
+// Эллипс в подокне
+float ellipse_rx = 0.35f, ellipse_ry = 0.2f;
+
+// Второе окно (треугольник + круг)
+float triRotate = 0.0f;
+float circleScale = 1.0f;
+float circleScaleDelta = 0.01f;
+
+struct RGB { float r,g,b; };
+RGB win2Color = {1.0f,0.0f,0.0f}; // начальный цвет красный
+
+// ---------- Вспомогательные функции ----------
+void drawSquareFrame(float outer_r, float inner_r, float angle, RGB color) {
+    glPushMatrix();
+    glRotatef(angle * 180.0f / PI, 0.0f, 0.0f, 1.0f);
+    glBegin(GL_TRIANGLE_STRIP);
+    glColor3f(color.r, color.g, color.b);
+    for (int i = 0; i <= 4; ++i) {
+        float a = PI/4 + i*(PI/2);
+        float ox = outer_r * cosf(a), oy = outer_r * sinf(a);
+        float ix = inner_r * cosf(a), iy = inner_r * sinf(a);
+        glVertex2f(ox, oy);
+        glVertex2f(ix, iy);
+    }
+    glEnd();
+    glPopMatrix();
+}
+
+void drawEllipse(float rx, float ry, int segments=80) {
+    glBegin(GL_TRIANGLE_FAN);
+    glVertex2f(0,0);
+    for (int i=0; i<=segments; i++) {
+        float a = 2*PI*i/segments;
+        glVertex2f(rx*cosf(a), ry*sinf(a));
+    }
+    glEnd();
+}
+
+void drawTriangle(float r, float angle, RGB color) {
+    glPushMatrix();
+    glRotatef(angle * 180.0f/PI,0,0,1);
+    glBegin(GL_TRIANGLES);
+    glColor3f(color.r,color.g,color.b);
+    glVertex2f(0, r);
+    glVertex2f(-r*0.866f,-r*0.5f);
+    glVertex2f(r*0.866f,-r*0.5f);
+    glEnd();
+    glPopMatrix();
+}
+
+void drawCircle(float r, RGB color, int segments=64) {
+    glBegin(GL_TRIANGLE_FAN);
+    glColor3f(color.r,color.g,color.b);
+    glVertex2f(0,0);
+    for (int i=0; i<=segments; i++) {
+        float a = 2*PI*i/segments;
+        glVertex2f(r*cosf(a), r*sinf(a));
+    }
+    glEnd();
+}
+
+// ---------- Display функции ----------
+void displayMain() {
+    glutSetWindow(winMain);
+    glClearColor(0,0,0,1);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    for (int level=0; level<squareLevels; ++level) {
+        float outer_r = squareMaxR - level*(squareMaxR/squareLevels);
+        float inner_r = outer_r - (squareMaxR/(squareLevels*2.5f));
+        RGB c;
+        if (squareColorsLevel==0) { // серые
+            float g = 1.0f - (float)level/(squareLevels-1);
+            c = {g,g,g};
+        } else if (squareColorsLevel==1) { // красные
+            float g = 1.0f - (float)level/(squareLevels-1);
+            c = {1.0f,g*0.2f,g*0.2f};
+        } else { // зелёные
+            float g = 1.0f - (float)level/(squareLevels-1);
+            c = {g*0.2f,1.0f,g*0.2f};
+        }
+        drawSquareFrame(outer_r, inner_r, squareRotate+level*0.05f, c);
+    }
+    glutSwapBuffers();
+}
+
+void displaySub() {
+    glutSetWindow(winSub);
+    const float* bg = subBgColors[subBgIndex%3];
+    glClearColor(bg[0],bg[1],bg[2],1);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glColor3f(1,0,0);
+    drawEllipse(ellipse_rx, ellipse_ry);
+    glutSwapBuffers();
+}
+
+void displayWin2() {
+    glutSetWindow(win2);
+    glClearColor(0.05f,0.05f,0.1f,1);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    // круг
+    glPushMatrix();
+    glTranslatef(-0.4f,0,0);
+    drawCircle(0.2f*circleScale, win2Color);
+    glPopMatrix();
+
+    // треугольник
+    glPushMatrix();
+    glTranslatef(0.5f,0,0);
+    drawTriangle(0.25f, triRotate, win2Color);
+    glPopMatrix();
+
+    glutSwapBuffers();
+}
+
+// ---------- Idle / Animation ----------
+void idleFunc() {
+    if (!animate) return;
+
+    squareRotate += 0.01f;
+    triRotate -= 0.02f;
+    circleScale += circleScaleDelta;
+    if (circleScale>1.4f || circleScale<0.6f) circleScaleDelta = -circleScaleDelta;
+
+    glutPostWindowRedisplay(winMain);
+    glutPostWindowRedisplay(winSub);
+    glutPostWindowRedisplay(win2);
+}
+
+// ---------- Меню ----------
+void subMenuCallback(int entry) {
+    subBgIndex = entry;
+    glutPostWindowRedisplay(winSub);
+}
+
+void menuCallback(int option) {
+    switch (option) {
+    case 1: animate = false; break;
+    case 2: animate = true; break;
+    case 3: // white
+        squareColor[0] = 1.0f;
+        squareColor[1] = 1.0f;
+        squareColor[2] = 1.0f;
+        break;
+    case 4: // red
+        squareColor[0] = 1.0f;
+        squareColor[1] = 0.0f;
+        squareColor[2] = 0.0f;
+        break;
+    case 5: // green
+        squareColor[0] = 0.0f;
+        squareColor[1] = 1.0f;
+        squareColor[2] = 0.0f;
+        break;
+    }
+    glutPostRedisplay(); // перерисовать окно
+}
+
+// ---------- Клавиатура для окна 2 ----------
+void keyboardWin2(unsigned char key, int, int) {
+    switch(key) {
+        case 'r': win2Color={1,0,0}; break;
+        case 'g': win2Color={0,1,0}; break;
+        case 'b': win2Color={0,0,1}; break;
+        case 'y': win2Color={1,1,0}; break;
+        case 'o': win2Color={1,0.5f,0}; break;
+        case 'p': win2Color={0.6f,0,0.6f}; break;
+        case 'w': win2Color={1,1,1}; break;
+    }
+    glutPostRedisplay();
+}
+
+
+
+void menuMain(int option) {
+    switch (option) {
+    case 1: squareColor[0] = 1; squareColor[1] = 1; squareColor[2] = 1; break; // белый
+    case 2: squareColor[0] = 1; squareColor[1] = 0; squareColor[2] = 0; break; // красный
+    case 3: squareColor[0] = 0; squareColor[1] = 1; squareColor[2] = 0; break; // зелёный
+    case 4: animate = true; break;
+    case 5: animate = false; break;
+    }
+    glutPostRedisplay();
+}
+
+// ---------- Main ----------
+int main(int argc, char** argv) {
+    glutInit(&argc,argv);
+    glutInitDisplayMode(GLUT_DOUBLE|GLUT_RGBA);
+    glutInitWindowSize(800,600);
+    glutInitWindowPosition(50,50);
+
+    // Главное окно
+    winMain = glutCreateWindow("Main Window - Squares");
+    glutDisplayFunc(displayMain);
+
+    int colorMenu = glutCreateMenu(menuMain);
+    glutAddMenuEntry("White", 1);
+    glutAddMenuEntry("Red", 2);
+    glutAddMenuEntry("Green", 3);
+
+    // Главное меню
+    int mainMenu = glutCreateMenu(menuMain);
+    glutAddMenuEntry("Start Animation", 4);
+    glutAddMenuEntry("Stop Animation", 5);
+    glutAddSubMenu("Square Colors", colorMenu);
+
+    // Вешаем на правую кнопку мыши
+    glutAttachMenu(GLUT_RIGHT_BUTTON);
+
+    // Подокно
+    winSub = glutCreateSubWindow(winMain,40,40,300,300);
+    glutDisplayFunc(displaySub);
+    int sMenu = glutCreateMenu(subMenuCallback);
+    glutAddMenuEntry("Dark Slate",0);
+    glutAddMenuEntry("Light Blue",1);
+    glutAddMenuEntry("Beige",2);
+    glutAttachMenu(GLUT_RIGHT_BUTTON);
+
+    // Второе окно
+    glutInitWindowSize(400,400);
+    glutInitWindowPosition(900,80);
+    win2 = glutCreateWindow("Window 2 - Circle & Triangle");
+    glutDisplayFunc(displayWin2);
+    glutKeyboardFunc(keyboardWin2);
+
+    // Idle
+    glutIdleFunc(idleFunc);
+
+    glutMainLoop();
+    return 0;
+}
